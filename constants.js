@@ -1,6 +1,6 @@
 
-const messageTypes = {
+const userRoles = {
     user: 'user',
     agent: 'agent'
 }
-exports.messageTypes = messageTypes;
+exports.userRoles = userRoles;

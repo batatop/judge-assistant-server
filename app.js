@@ -1,5 +1,5 @@
 const express = require('express');
-const { sendMessage } = require('./functions');
+const { sendMessage, addCaseFileToAssistant } = require('./functions');
 const app = express();
 const port = 8080;
 const bodyParser = require('body-parser');
@@ -20,10 +20,16 @@ app.post('/api/sendMessage', (req, res) => {
   })
 });
 
-app.post('/api/summerize', (req, res) => {
-  const { userId } = req.query;
-  console.log(userId);
-  res.send('summerize');
+app.post('/api/addCaseFile', (req, res) => {
+  const { uid, caseId, fileId } = req.body;
+  addCaseFileToAssistant(uid, caseId, fileId )
+    .then(() => {
+      res.send('File added');
+    })
+    .catch((error) => {
+      console.error(error);
+      res.status(500).send('Error adding file');
+    });
 });
 
 app.listen(port, () => {

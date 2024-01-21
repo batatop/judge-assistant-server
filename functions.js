@@ -1,8 +1,9 @@
-const { messageTypes } = require('./constants');
+const { userRoles } = require('./constants');
 const { storage, db, firebase } = require('./firebase');
 const OpenAI = require('openai').OpenAI
 const pdfParse = require('pdf-parse');
 const dotenv = require('dotenv');
+const fs = require('fs');
 
 dotenv.config();
 
@@ -24,10 +25,10 @@ async function convertFileToText(uid, caseId, fileId) {
             throw new Error('File does not exist');
         }
 
-        const [fileContents] = await file.download();
+        let [fileContents] = await file.download();
         const fileType = file?.metadata?.contentType;
         if (fileType === 'application/pdf') {
-            extractTextFromPDF(fileContents);
+            fileContents = await extractTextFromPDF(fileContents);
         }
         return fileContents;
     } catch (error) {
@@ -54,7 +55,7 @@ function sendMessage(uid, caseId, message) {
         const newMessageRef = caseDbRef.push();
         newMessageRef.set({
             message,
-            type: messageTypes.user,
+            type: userRoles.user,
             timestamp: firebase.database.ServerValue.TIMESTAMP
         }, (error) => {
             if (error) {
@@ -76,7 +77,7 @@ async function sendMessageToAgent(messageText, uid, caseId) {
 
     const message = await openai.beta.threads.messages.create(
         threadId,
-        { role: messageTypes.user, content: messageText }
+        { role: userRoles.user, content: messageText }
     );
 
     let run = await openai.beta.threads.runs.create(threadId, {
@@ -91,13 +92,13 @@ async function sendMessageToAgent(messageText, uid, caseId) {
     const messages = await openai.beta.threads.messages.list(threadId);
 
     const agentResponse = messages.data[0]?.content?.[0]?.text?.value;
-    console.log("agentResponse", {agentResponse, uid, caseId})
+    console.log("agentResponse", { agentResponse, uid, caseId })
 
     const caseDbRef = db.ref(`/cases/${uid}/${caseId}/chat`);
     const newMessageRef = caseDbRef.push();
     newMessageRef.set({
         message: agentResponse,
-        type: messageTypes.agent,
+        type: userRoles.agent,
         timestamp: firebase.database.ServerValue.TIMESTAMP
     }, (error) => {
         if (error) {
@@ -134,5 +135,51 @@ function createThread(uid, caseId) {
         }).catch((error) => {
             reject(error);
         })
+    })
+}
+
+function addCaseFileToAssistant(uid, caseId, fileId) {
+    return new Promise(async (resolve, reject) => {
+        // get file
+        console.log(`converting file to text`)
+        const text = await convertFileToText(uid, caseId, fileId)
+        console.log("converted file to text")
+
+        // write to tmp file
+        const jsonl = convertTranscriptToJsonl(text);
+        fs.writeFileSync(`./tmp/${fileId}.jsonl`, jsonl);
+        console.log("converted to jsonl")
+
+        // upload to openai
+        const openAiFileId = await uploadFileToOpenAi(fileId);
+        console.log("uploaded to openai")
+
+        const updateObj = {
+            openAiFileId,
+        }
+
+        // save to db
+        const caseDbRef = db.ref(`/cases/${uid}/${caseId}/files/${fileId}`);
+        caseDbRef.update(updateObj)
+
+        // delete the tmp file
+        fs.unlinkSync(`./tmp/${fileId}.jsonl`);
+    })
+}
+exports.addCaseFileToAssistant = addCaseFileToAssistant;
+
+function convertTranscriptToJsonl(transcript) {
+    const prompt = 'This is one of the case files user has uploaded. Only use case files to get the answer.';
+    const completion = transcript;
+    return JSON.stringify({ prompt, completion })
+}
+
+async function uploadFileToOpenAi(fileId) {
+    return new Promise(async (resolve, reject) => {
+        const file = await openai.files.create({
+            file: fs.createReadStream(`./tmp/${fileId}.jsonl`),
+            purpose: "fine-tune",
+        });
+        resolve(file.id);
     })
 }
