@@ -50,34 +50,34 @@ exports.extractTextFromPDF = extractTextFromPDF;
 
 function sendMessage(uid, caseId, message) {
     return new Promise((resolve, reject) => {
-        // const caseDbRef = db.ref(`/cases/${uid}/${caseId}/chat`);
-        // const newMessageRef = caseDbRef.push();
-        // newMessageRef.set({
-        //     message,
-        //     type: messageTypes.user,
-        //     timestamp: firebase.database.ServerValue.TIMESTAMP
-        // }, (error) => {
-        //     if (error) {
-        //         reject(error);
-        //     } else {
-        sendMessageToAgent(message, uid, caseId)
-        resolve();
-        // }
-        // })
+        const caseDbRef = db.ref(`/cases/${uid}/${caseId}/chat`);
+        const newMessageRef = caseDbRef.push();
+        newMessageRef.set({
+            message,
+            type: messageTypes.user,
+            timestamp: firebase.database.ServerValue.TIMESTAMP
+        }, (error) => {
+            if (error) {
+                reject(error);
+            } else {
+                sendMessageToAgent(message, uid, caseId)
+                resolve();
+            }
+        })
     })
 }
 exports.sendMessage = sendMessage;
 
 async function sendMessageToAgent(messageText, uid, caseId) {
+    console.log("sendMessageToAgent", { messageText, uid, caseId })
+
     // get thread id
     const threadId = await getThreadId(uid, caseId);
-    console.log("threadId", threadId)
 
     const message = await openai.beta.threads.messages.create(
         threadId,
         { role: messageTypes.user, content: messageText }
     );
-    console.log("message", message)
 
     let run = await openai.beta.threads.runs.create(threadId, {
         assistant_id: ASSISTANT_ID
@@ -87,13 +87,11 @@ async function sendMessageToAgent(messageText, uid, caseId) {
         await new Promise(resolve => setTimeout(resolve, 1000));
         run = await openai.beta.threads.runs.retrieve(threadId, run.id);
     }
-    console.log("run", run)
 
     const messages = await openai.beta.threads.messages.list(threadId);
-    console.log("messages", messages.data)
 
     const agentResponse = messages.data[0]?.content?.[0]?.text?.value;
-    console.log("agentResponse", agentResponse)
+    console.log("agentResponse", {agentResponse, uid, caseId})
 }
 
 async function getThreadId(uid, caseId) {
@@ -101,7 +99,7 @@ async function getThreadId(uid, caseId) {
         const caseDbRef = db.ref(`/cases/${uid}/${caseId}`);
         caseDbRef.once('value', async (snapshot) => {
             let threadId = snapshot.val()?.threadId;
-            if(!threadId) {
+            if (!threadId) {
                 // create thread
                 threadId = await createThread(uid, caseId);
                 console.log("created thread", threadId)
