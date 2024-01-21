@@ -92,6 +92,18 @@ async function sendMessageToAgent(messageText, uid, caseId) {
 
     const agentResponse = messages.data[0]?.content?.[0]?.text?.value;
     console.log("agentResponse", {agentResponse, uid, caseId})
+
+    const caseDbRef = db.ref(`/cases/${uid}/${caseId}/chat`);
+    const newMessageRef = caseDbRef.push();
+    newMessageRef.set({
+        message: agentResponse,
+        type: messageTypes.agent,
+        timestamp: firebase.database.ServerValue.TIMESTAMP
+    }, (error) => {
+        if (error) {
+            console.error(error);
+        }
+    })
 }
 
 async function getThreadId(uid, caseId) {
