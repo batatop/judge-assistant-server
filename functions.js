@@ -1,6 +1,16 @@
 const { messageTypes } = require('./constants');
 const { storage, db, firebase } = require('./firebase');
+const OpenAI = require('openai').OpenAI
 const pdfParse = require('pdf-parse');
+const dotenv = require('dotenv');
+
+dotenv.config();
+
+const ASSISTANT_ID = 'asst_FxuWrPwqZzGXUKDPUENVwHyr';
+
+const openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY
+});
 
 async function convertFileToText(uid, caseId, fileId) {
     const bucket = storage.bucket();
@@ -40,23 +50,47 @@ exports.extractTextFromPDF = extractTextFromPDF;
 
 function sendMessage(uid, caseId, message) {
     return new Promise((resolve, reject) => {
-        const caseDbRef = db.ref(`/cases/${uid}/${caseId}/chat`);
-        const newMessageRef = caseDbRef.push();
-        newMessageRef.set({
-            message,
-            type: messageTypes.user,
-            timestamp: firebase.database.ServerValue.TIMESTAMP
-        }, (error) => {
-            if (error) {
-                reject(error);
-            } else {
-                resolve();
-            }
-        })
+        // const caseDbRef = db.ref(`/cases/${uid}/${caseId}/chat`);
+        // const newMessageRef = caseDbRef.push();
+        // newMessageRef.set({
+        //     message,
+        //     type: messageTypes.user,
+        //     timestamp: firebase.database.ServerValue.TIMESTAMP
+        // }, (error) => {
+        //     if (error) {
+        //         reject(error);
+        //     } else {
+        sendMessageToAgent(message, uid, caseId)
+        resolve();
+        // }
+        // })
     })
 }
 exports.sendMessage = sendMessage;
 
-function sendMessageToAgent() {
-    
+async function sendMessageToAgent(messageText) {
+    const thread = await openai.beta.threads.create();
+    console.log("thread", thread)
+
+    const message = await openai.beta.threads.messages.create(
+        thread.id,
+        { role: messageTypes.user, content: messageText }
+    );
+    console.log("message", message)
+
+    let run = await openai.beta.threads.runs.create(thread.id, {
+        assistant_id: ASSISTANT_ID
+    });
+    // wait until the run is complete
+    while (run.status !== 'completed') {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        run = await openai.beta.threads.runs.retrieve(thread.id, run.id);
+    }
+    console.log("run", run)
+
+    const messages = await openai.beta.threads.messages.list(thread.id);
+    console.log("messages", messages.data)
+
+    const agentResponse = messages.data[0]?.content
+    console.log("agentResponse", agentResponse)
 }
