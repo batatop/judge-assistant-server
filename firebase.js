@@ -7,4 +7,6 @@ admin.initializeApp({
   storageBucket: "judge-assistant-3c8dd.appspot.com" 
 });
 
+exports.firebase = admin;
 exports.storage = admin.storage();
+exports.db = admin.database();

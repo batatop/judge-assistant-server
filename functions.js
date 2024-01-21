@@ -1,4 +1,5 @@
-const { storage } = require('./firebase');
+const { messageTypes } = require('./constants');
+const { storage, db, firebase } = require('./firebase');
 const pdfParse = require('pdf-parse');
 
 async function convertFileToText(uid, caseId, fileId) {
@@ -36,3 +37,22 @@ function extractTextFromPDF(pdfBuffer) {
     })
 }
 exports.extractTextFromPDF = extractTextFromPDF;
+
+function sendMessage(uid, caseId, message) {
+    return new Promise((resolve, reject) => {
+        const caseDbRef = db.ref(`/cases/${uid}/${caseId}/chat`);
+        const newMessageRef = caseDbRef.push();
+        newMessageRef.set({
+            message,
+            type: messageTypes.user,
+            timestamp: firebase.database.ServerValue.TIMESTAMP
+        }, (error) => {
+            if (error) {
+                reject(error);
+            } else {
+                resolve();
+            }
+        })
+    })
+}
+exports.sendMessage = sendMessage;
