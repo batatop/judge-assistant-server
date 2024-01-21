@@ -68,29 +68,61 @@ function sendMessage(uid, caseId, message) {
 }
 exports.sendMessage = sendMessage;
 
-async function sendMessageToAgent(messageText) {
-    const thread = await openai.beta.threads.create();
-    console.log("thread", thread)
+async function sendMessageToAgent(messageText, uid, caseId) {
+    // get thread id
+    const threadId = await getThreadId(uid, caseId);
+    console.log("threadId", threadId)
 
     const message = await openai.beta.threads.messages.create(
-        thread.id,
+        threadId,
         { role: messageTypes.user, content: messageText }
     );
     console.log("message", message)
 
-    let run = await openai.beta.threads.runs.create(thread.id, {
+    let run = await openai.beta.threads.runs.create(threadId, {
         assistant_id: ASSISTANT_ID
     });
     // wait until the run is complete
     while (run.status !== 'completed') {
         await new Promise(resolve => setTimeout(resolve, 1000));
-        run = await openai.beta.threads.runs.retrieve(thread.id, run.id);
+        run = await openai.beta.threads.runs.retrieve(threadId, run.id);
     }
     console.log("run", run)
 
-    const messages = await openai.beta.threads.messages.list(thread.id);
+    const messages = await openai.beta.threads.messages.list(threadId);
     console.log("messages", messages.data)
 
-    const agentResponse = messages.data[0]?.content
+    const agentResponse = messages.data[0]?.content?.[0]?.text?.value;
     console.log("agentResponse", agentResponse)
+}
+
+async function getThreadId(uid, caseId) {
+    return new Promise(async (resolve, reject) => {
+        const caseDbRef = db.ref(`/cases/${uid}/${caseId}`);
+        caseDbRef.once('value', async (snapshot) => {
+            let threadId = snapshot.val()?.threadId;
+            if(!threadId) {
+                // create thread
+                threadId = await createThread(uid, caseId);
+                console.log("created thread", threadId)
+            }
+            resolve(threadId);
+        }, (error) => {
+            reject(error);
+        })
+    })
+}
+
+function createThread(uid, caseId) {
+    return new Promise((resolve, reject) => {
+        openai.beta.threads.create().then((thread) => {
+            const caseDbRef = db.ref(`/cases/${uid}/${caseId}`);
+            caseDbRef.update({
+                threadId: thread.id
+            })
+            resolve(thread.id);
+        }).catch((error) => {
+            reject(error);
+        })
+    })
 }
