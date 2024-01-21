@@ -56,3 +56,7 @@ function sendMessage(uid, caseId, message) {
     })
 }
 exports.sendMessage = sendMessage;
+
+function sendMessageToAgent() {
+    
+}
