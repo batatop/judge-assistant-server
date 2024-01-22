@@ -3,6 +3,7 @@ const { sendMessage, addCaseFileToAssistant } = require('./functions');
 const app = express();
 const port = 8080;
 const bodyParser = require('body-parser');
+const { userRoles } = require('./constants');
 
 app.use(bodyParser.json());
 
@@ -12,7 +13,7 @@ app.get('/', (req, res) => {
 
 app.post('/api/sendMessage', (req, res) => {
   const { uid, caseId, message } = req.body;
-  sendMessage(uid, caseId, message).then(() => {
+  sendMessage(uid, caseId, message, userRoles.user).then(() => {
     res.send('Message sent');
   }).catch((error) => {
     console.error(error);
